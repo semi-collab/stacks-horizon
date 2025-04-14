@@ -150,6 +150,7 @@
 	)
 )
 
+
 (define-public (create-event (name (string-ascii 50)) 
                            (description (string-ascii 200))
                            (start-height uint)
@@ -320,4 +321,73 @@
 ;; Helper function to get verification details
 (define-read-only (get-verification-details (event-id uint) (attendee principal))
     (map-get? verification-details {event-id: event-id, attendee: attendee})
+)
+
+;; Helper function to check verification status with details
+(define-read-only (get-full-verification-status (event-id uint) (attendee principal))
+    (let ((attendance (get-attendance-record event-id attendee))
+          (details (get-verification-details event-id attendee)))
+        {
+            verified: (match attendance
+                        attendance-data (get verified attendance-data)
+                        false),
+            details: details
+        }
+	)
+)
+
+;; Reward claiming
+(define-public (claim-reward (event-id uint))
+    (let ((event (unwrap! (get-event event-id) ERR-EVENT-NOT-FOUND))
+          (attendance (unwrap! (get-attendance-record event-id tx-sender) ERR-EVENT-NOT-FOUND)))
+        (begin
+            (asserts! (> block-height (get end-height event)) ERR-EVENT-NOT-ENDED)
+            (asserts! (get verified attendance) ERR-NOT-AUTHORIZED)
+            (asserts! (is-none (get-reward-claim event-id tx-sender)) ERR-ALREADY-CLAIMED)
+
+            ;; Calculate reward based on attendance duration
+            (let ((base-amount (get base-reward event))
+                  (bonus-amount (if (>= (get duration attendance)
+                                      (get min-attendance-duration event))
+                                  (get bonus-reward event)
+                                  u0))
+                  (total-reward (+ base-amount bonus-amount)))
+
+                (asserts! (<= total-reward (var-get treasury-balance)) ERR-INSUFFICIENT-FUNDS)
+                (try! (as-contract (stx-transfer? total-reward tx-sender tx-sender)))
+                (var-set treasury-balance (- (var-get treasury-balance) total-reward))
+
+                (map-set rewards-claimed
+                    {event-id: event-id, attendee: tx-sender}
+                    {
+                        amount: total-reward,
+                        claimed-at: block-height,
+                        reward-tier: (if (> bonus-amount u0) u2 u1)
+                    })
+                (ok total-reward))
+		)
+	)
+)
+;; Constants
+(define-constant BURN-ADDRESS 'SP000000000000000000002Q6VF78)
+(define-constant ERR-INVALID-ADDRESS (err u1002))
+(define-constant ERR-ALREADY-VERIFIER (err u1003))
+(define-constant ERR-NOT-VERIFIER (err u1004))
+(define-constant ERR-INVALID-AMOUNT (err u1005))
+(define-constant ERR-EVENT-ALREADY-INACTIVE (err u1006))
+(define-constant ERR-TRANSFER-FAILED (err u1007))
+
+;; Admin functions
+(define-public (add-verifier (address principal))
+    (begin
+        ;; Check if caller is contract owner
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        ;; Check if address is valid (not burn address)
+        (asserts! (not (is-eq address BURN-ADDRESS)) ERR-INVALID-ADDRESS)
+        ;; Check if address is not already a verifier
+        (asserts! (not (default-to false (map-get? verifiers address))) ERR-ALREADY-VERIFIER)
+        ;; Add verifier
+        (map-set verifiers address true)
+        (ok true)
+    )
 )
