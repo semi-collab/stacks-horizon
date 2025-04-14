@@ -391,3 +391,60 @@
         (ok true)
     )
 )
+
+(define-public (remove-verifier (address principal))
+    (begin
+        ;; Check if caller is contract owner
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        ;; Check if address is valid
+        (asserts! (not (is-eq address BURN-ADDRESS)) ERR-INVALID-ADDRESS)
+        ;; Check if address is currently a verifier
+        (asserts! (default-to false (map-get? verifiers address)) ERR-NOT-VERIFIER)
+        ;; Remove verifier
+        (map-set verifiers address false)
+        (ok true)
+    )
+)
+
+(define-public (deactivate-event (event-id uint))
+    (let 
+        (
+            (event (unwrap! (get-event event-id) ERR-EVENT-NOT-FOUND))
+        )
+        (begin
+            ;; Check if caller is contract owner
+            (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+            ;; Check if event exists and is currently active
+            (asserts! (get is-active event) ERR-EVENT-ALREADY-INACTIVE)
+            ;; Deactivate event
+            (map-set events event-id
+                (merge event {is-active: false}))
+            (ok true)
+        )
+    )
+)
+
+(define-public (deposit-funds (amount uint))
+    (begin
+        ;; Check if amount is valid (greater than 0)
+        (asserts! (> amount u0) ERR-INVALID-AMOUNT)
+        ;; Check if sender has sufficient balance
+        (asserts! (<= amount (stx-get-balance tx-sender)) ERR-INVALID-AMOUNT)
+        ;; Perform transfer
+        (let ((transfer-result (try! (stx-transfer? amount tx-sender (as-contract tx-sender)))))
+            (begin
+                (var-set treasury-balance (+ (var-get treasury-balance) amount))
+                (ok true))
+        )
+    )
+)
+
+(define-public (withdraw-funds (amount uint))
+    (begin
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        (asserts! (<= amount (var-get treasury-balance)) ERR-INSUFFICIENT-FUNDS)
+        (try! (as-contract (stx-transfer? amount tx-sender tx-sender)))
+        (var-set treasury-balance (- (var-get treasury-balance) amount))
+        (ok true)
+    )
+)
