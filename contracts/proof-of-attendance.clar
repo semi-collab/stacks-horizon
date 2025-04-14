@@ -160,7 +160,7 @@
                            (min-attendance uint))
     (let ((event-id (+ (var-get event-counter) u1))
           (end-height (+ start-height duration))
-          (current-height block-height)
+          (current-height stacks-block-height)
           (name-length (len name))
           (desc-length (len description)))
         (begin
@@ -229,13 +229,13 @@
     (let ((event (unwrap! (get-event event-id) ERR-EVENT-NOT-FOUND)))
         (begin
             (asserts! (get is-active event) ERR-EVENT-ENDED)        
-            (asserts! (>= block-height (get start-height event)) ERR-EVENT-NOT-ENDED)
-            (asserts! (< block-height (get end-height event)) ERR-EVENT-ENDED)       
+            (asserts! (>= stacks-block-height (get start-height event)) ERR-EVENT-NOT-ENDED)
+            (asserts! (< stacks-block-height (get end-height event)) ERR-EVENT-ENDED)       
             (asserts! (is-none (get-attendance-record event-id tx-sender)) ERR-ALREADY-REGISTERED)
             (map-set event-attendance 
                 {event-id: event-id, attendee: tx-sender}
                 {
-                    check-in-height: block-height,
+                    check-in-height: stacks-block-height,
                     check-out-height: u0,
                     duration: u0,
                     verified: false
@@ -250,13 +250,13 @@
           (event (unwrap! (get-event event-id) ERR-EVENT-NOT-FOUND)))
         (begin
             (asserts! (get is-active event) ERR-EVENT-ENDED)
-            (asserts! (> block-height (get check-in-height attendance)) ERR-INVALID-DURATION)
-            (let ((duration (- block-height (get check-in-height attendance))))
+            (asserts! (> stacks-block-height (get check-in-height attendance)) ERR-INVALID-DURATION)
+            (let ((duration (- stacks-block-height (get check-in-height attendance))))
                 (map-set event-attendance
                     {event-id: event-id, attendee: tx-sender}
                     {
                         check-in-height: (get check-in-height attendance),
-                        check-out-height: block-height,
+                        check-out-height: stacks-block-height,
                         duration: duration,
                         verified: false
                     })
@@ -311,7 +311,7 @@
                 {event-id: event-id, attendee: attendee}
                 {
                     verified-by: tx-sender,
-                    verified-at: block-height
+                    verified-at: stacks-block-height
                 })
             (ok true)
 		)
@@ -341,7 +341,7 @@
     (let ((event (unwrap! (get-event event-id) ERR-EVENT-NOT-FOUND))
           (attendance (unwrap! (get-attendance-record event-id tx-sender) ERR-EVENT-NOT-FOUND)))
         (begin
-            (asserts! (> block-height (get end-height event)) ERR-EVENT-NOT-ENDED)
+            (asserts! (> stacks-block-height (get end-height event)) ERR-EVENT-NOT-ENDED)
             (asserts! (get verified attendance) ERR-NOT-AUTHORIZED)
             (asserts! (is-none (get-reward-claim event-id tx-sender)) ERR-ALREADY-CLAIMED)
 
@@ -361,7 +361,7 @@
                     {event-id: event-id, attendee: tx-sender}
                     {
                         amount: total-reward,
-                        claimed-at: block-height,
+                        claimed-at: stacks-block-height,
                         reward-tier: (if (> bonus-amount u0) u2 u1)
                     })
                 (ok total-reward))
