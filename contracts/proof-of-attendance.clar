@@ -78,3 +78,74 @@
         is-active: bool
     }
 )
+
+;; Attendance tracking
+(define-map event-attendance 
+    { event-id: uint, attendee: principal }
+    {
+        check-in-height: uint,
+        check-out-height: uint,
+        duration: uint,
+        verified: bool
+    }
+)
+
+;; Separate map for verification details
+(define-map verification-details
+    { event-id: uint, attendee: principal }
+    {
+        verified-by: principal,
+        verified-at: uint
+    }
+)
+
+
+;; Rewards claimed
+(define-map rewards-claimed
+    { event-id: uint, attendee: principal }
+    {
+        amount: uint,
+        claimed-at: uint,
+        reward-tier: uint
+    }
+)
+
+;; Verification authorities
+(define-map verifiers principal bool)
+
+;; Read-only functions
+(define-read-only (get-owner)
+    (var-get contract-owner)
+)
+
+(define-read-only (get-event (event-id uint))
+    (map-get? events event-id)
+)
+
+(define-read-only (get-attendance-record (event-id uint) (attendee principal))
+    (map-get? event-attendance {event-id: event-id, attendee: attendee})
+)
+
+(define-read-only (get-reward-claim (event-id uint) (attendee principal))
+    (map-get? rewards-claimed {event-id: event-id, attendee: attendee})
+)
+
+(define-read-only (is-verifier (address principal))
+    (default-to false (map-get? verifiers address))
+)
+
+;; Event management functions
+
+;; Helper function to check if string contains only valid characters
+(define-private (is-valid-ascii (s (string-ascii 200)))
+    (let ((len (len s)))
+        (and
+            ;; Check if length is greater than 0
+            (> len u0)
+            ;; Ensure first character isn't whitespace
+            (not (is-eq (unwrap-panic (element-at s u0)) " "))
+            ;; Ensure last character isn't whitespace
+            (not (is-eq (unwrap-panic (element-at s (- len u1))) " "))
+		)
+	)
+)
