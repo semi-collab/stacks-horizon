@@ -243,3 +243,81 @@
 		)
 	)
 )
+
+(define-public (check-out (event-id uint))
+    (let ((attendance (unwrap! (get-attendance-record event-id tx-sender) ERR-EVENT-NOT-FOUND))
+          (event (unwrap! (get-event event-id) ERR-EVENT-NOT-FOUND)))
+        (begin
+            (asserts! (get is-active event) ERR-EVENT-ENDED)
+            (asserts! (> block-height (get check-in-height attendance)) ERR-INVALID-DURATION)
+            (let ((duration (- block-height (get check-in-height attendance))))
+                (map-set event-attendance
+                    {event-id: event-id, attendee: tx-sender}
+                    {
+                        check-in-height: (get check-in-height attendance),
+                        check-out-height: block-height,
+                        duration: duration,
+                        verified: false
+                    })
+                (ok duration))
+		)
+	)
+)
+
+
+;; Helper function to check if attendance can be verified
+(define-read-only (can-verify-attendance (event-id uint) (attendee principal))
+    (let ((attendance (get-attendance-record event-id attendee))
+          (event (get-event event-id)))
+        (and 
+            (is-some attendance)
+            (is-some event)     
+            (get is-active (unwrap! event false))
+            (> (get check-in-height (unwrap! attendance false)) u0)
+            (not (get verified (unwrap! attendance false)))
+        )
+	)
+)
+
+
+;; Enhanced verification function
+(define-public (verify-attendance (event-id uint) (attendee principal))
+    (let ((attendance (unwrap! (get-attendance-record event-id attendee) ERR-EVENT-NOT-FOUND))
+          (event (unwrap! (get-event event-id) ERR-EVENT-NOT-FOUND)))
+        (begin
+            ;; Verify the caller is authorized
+            (asserts! (is-verifier tx-sender) ERR-NOT-AUTHORIZED)
+
+            ;; Check if event is still active
+            (asserts! (get is-active event) ERR-EVENT-NOT-ACTIVE)
+
+            ;; Verify attendee is a valid principal
+            (asserts! (not (is-eq attendee tx-sender)) ERR-INVALID-ATTENDEE)
+
+            ;; Check if already verified
+            (asserts! (not (get verified attendance)) ERR-ALREADY-VERIFIED)
+
+            ;; Verify check-in record exists and is valid
+            (asserts! (> (get check-in-height attendance) u0) ERR-NO-CHECKIN-RECORD)
+
+            ;; Update attendance record
+            (map-set event-attendance
+                {event-id: event-id, attendee: attendee}
+                (merge attendance {verified: true}))
+
+            ;; Store verification details separately
+            (map-set verification-details
+                {event-id: event-id, attendee: attendee}
+                {
+                    verified-by: tx-sender,
+                    verified-at: block-height
+                })
+            (ok true)
+		)
+	)
+)
+
+;; Helper function to get verification details
+(define-read-only (get-verification-details (event-id uint) (attendee principal))
+    (map-get? verification-details {event-id: event-id, attendee: attendee})
+)
